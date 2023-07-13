@@ -1,0 +1,47 @@
+# SPDX-License-Identifier: GPL-2.0+
+
+LIB_TESTS_L =
+LIB_TESTS = $(LIB_TESTS_L:%=$(TESTS_PREFIX)%)
+
+TESTS = $(LIB_TESTS)
+
+TESTS_TREES_L =
+TESTS_TREES = $(TESTS_TREES_L:%=$(TESTS_PREFIX)%)
+
+TESTS_TARGETS = $(TESTS) $(TESTS_TREES)
+
+TESTS_DEPFILES = $(TESTS:%=%.d) \
+	$(addprefix $(TESTS_PREFIX),testutils.d)
+
+TESTS_CLEANFILES_L = $(STD_CLEANFILES) \
+	*.dtb *.test.dts tmp.* *.bak
+TESTS_CLEANFILES = $(TESTS) $(TESTS_CLEANFILES_L:%=$(TESTS_PREFIX)%)
+TESTS_CLEANDIRS = $(TESTS_CLEANDIRS_L:%=$(TESTS_PREFIX)%)
+
+.PHONY: tests
+tests:	$(TESTS) $(TESTS_TREES)
+
+$(LIB_TESTS): %: $(TESTS_PREFIX)testutils.o util.o
+
+tests_clean:
+	@$(VECHO) CLEAN "(tests)"
+	rm -f $(STD_CLEANFILES:%=$(TESTS_PREFIX)%)
+	rm -f $(TESTS_CLEANFILES)
+
+check:	tests ${TESTS_BIN}
+	cd $(TESTS_PREFIX); ./run_tests.sh
+
+ifeq ($(NO_VALGRIND),1)
+checkm:
+	@echo "make checkm requires valgrind, but NO_VALGRIND=1"
+else
+checkm: tests ${TESTS_BIN} $(TESTS_PYLIBFDT)
+	cd $(TESTS_PREFIX); ./run_tests.sh -m
+endif
+
+checkv:	tests ${TESTS_BIN} $(TESTS_PYLIBFDT)
+	cd $(TESTS_PREFIX); ./run_tests.sh -v
+
+ifneq ($(DEPTARGETS),)
+-include $(TESTS_DEPFILES)
+endif
