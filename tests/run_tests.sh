@@ -4,6 +4,12 @@
 SRCDIR=`dirname "$0"`
 . "${SRCDIR}/./testutils.sh"
 
+# Help things find the libfdt_extra shared object
+if [ -z "$TEST_LIBDIR" ]; then
+    TEST_LIBDIR=../libfdt_extra
+fi
+export LD_LIBRARY_PATH="$TEST_LIBDIR"
+
 export QUIET_TEST=1
 
 export VALGRIND=
@@ -211,6 +217,16 @@ equal_test () {
     fi
 }
 
+libfdt_extra_tests () {
+    tmp=/tmp/tests.$$
+    orig=region_tree.test.dtb
+
+    # Tests for fdt_find_regions()
+    for flags in $(seq 0 15); do
+	run_test region_tree ${flags}
+    done
+}
+
 while getopts "vt:m" ARG ; do
     case $ARG in
 	"v")
@@ -225,12 +241,17 @@ while getopts "vt:m" ARG ; do
     esac
 done
 
+if [ -z "$TESTSETS" ]; then
+    TESTSETS="libfdt_extra"
+fi
+
 # Make sure we don't have stale blobs lying around
 rm -f *.test.dtb *.test.dts
 
 for set in $TESTSETS; do
     case $set in
-	"none")
+	"libfdt_extra")
+	    libfdt_extra_tests
 	    ;;
     esac
 done

@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-2.0+
 
-LIB_TESTS_L =
+LIB_TESTS_L = region_tree
 LIB_TESTS = $(LIB_TESTS_L:%=$(TESTS_PREFIX)%)
 
 TESTS = $(LIB_TESTS)
@@ -11,17 +11,19 @@ TESTS_TREES = $(TESTS_TREES_L:%=$(TESTS_PREFIX)%)
 TESTS_TARGETS = $(TESTS) $(TESTS_TREES)
 
 TESTS_DEPFILES = $(TESTS:%=%.d) \
-	$(addprefix $(TESTS_PREFIX),testutils.d)
+	$(addprefix $(TESTS_PREFIX),testutils.d region_tree.d)
 
 TESTS_CLEANFILES_L = $(STD_CLEANFILES) \
 	*.dtb *.test.dts tmp.* *.bak
 TESTS_CLEANFILES = $(TESTS) $(TESTS_CLEANFILES_L:%=$(TESTS_PREFIX)%)
 TESTS_CLEANDIRS = $(TESTS_CLEANDIRS_L:%=$(TESTS_PREFIX)%)
 
+LDLIBS_tests/region_tree = -lfdt
+
 .PHONY: tests
 tests:	$(TESTS) $(TESTS_TREES)
 
-$(LIB_TESTS): %: $(TESTS_PREFIX)testutils.o util.o
+$(LIB_TESTS): %: $(TESTS_PREFIX)testutils.o libfdt_extra/fdt_region.o util.o
 
 tests_clean:
 	@$(VECHO) CLEAN "(tests)"

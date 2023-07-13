@@ -20,7 +20,8 @@ CPPFLAGS = -I .
 WARNINGS = -Wall -Wpointer-arith -Wcast-qual -Wnested-externs -Wsign-compare \
 	-Wstrict-prototypes -Wmissing-prototypes -Wredundant-decls -Wshadow \
 	-Wsuggest-attribute=format -Wwrite-strings
-CFLAGS = -g -Os $(SHAREDLIB_CFLAGS) -Werror $(WARNINGS) $(EXTRA_CFLAGS)
+CFLAGS = -g -Os $(SHAREDLIB_CFLAGS) -Werror $(WARNINGS) $(EXTRA_CFLAGS) \
+	-Ilibfdt_extra
 
 PKG_CONFIG ?= pkg-config
 PYTHON ?= python3
@@ -131,6 +132,41 @@ ifneq ($(MAKECMDGOALS),libfdt_extra)
 endif
 endif
 
+
+#
+# Rules for libfdt_extra
+#
+LIBFDT_EXTRA_dir = libfdt_extra
+LIBFDT_EXTRA_archive = $(LIBFDT_EXTRA_dir)/libfdt_extra.a
+LIBFDT_EXTRA_lib = $(LIBFDT_EXTRA_dir)/libfdt_extra-$(FDT_TOOLS_VERSION).$(SHAREDLIB_EXT)
+LIBFDT_EXTRA_include = $(addprefix $(LIBFDT_EXTRA_dir)/,$(LIBFDT_EXTRA_INCLUDES))
+LIBFDT_EXTRA_version = $(addprefix $(LIBFDT_EXTRA_dir)/,$(LIBFDT_EXTRA_VERSION))
+
+
+ifeq ($(STATIC_BUILD),1)
+	CFLAGS += -static
+	LIBFDT_EXTRA_dep = $(LIBFDT_EXTRA_archive)
+else
+	LIBFDT_EXTRA_dep = $(LIBFDT_EXTRA_lib)
+endif
+
+include $(LIBFDT_EXTRA_dir)/Makefile.libfdt_extra
+
+.PHONY: libfdt_extra
+libfdt_extra: $(LIBFDT_EXTRA_archive) $(LIBFDT_EXTRA_lib)
+
+$(LIBFDT_EXTRA_archive): $(addprefix $(LIBFDT_EXTRA_dir)/,$(LIBFDT_EXTRA_OBJS))
+$(LIBFDT_EXTRA_lib): $(addprefix $(LIBFDT_EXTRA_dir)/,$(LIBFDT_EXTRA_OBJS)) $(LIBFDT_EXTRA_version)
+	@$(VECHO) LD $@
+	$(CC) $(LDFLAGS) $(SHAREDLIB_LDFLAGS)$(LIBFDT_EXTRA_soname) -o $(LIBFDT_EXTRA_lib) \
+		$(addprefix $(LIBFDT_EXTRA_dir)/,$(LIBFDT_EXTRA_OBJS))
+	ln -sf $(LIBFDT_EXTRA_LIB) $(LIBFDT_EXTRA_dir)/$(LIBFDT_EXTRA_soname)
+
+ifneq ($(DEPTARGETS),)
+-include $(LIBFDT_EXTRA_OBJS:%.o=$(LIBFDT_EXTRA_dir)/%.d)
+endif
+
+
 install-bin: all $(SCRIPTS)
 	@$(VECHO) INSTALL-BIN
 	$(INSTALL) -d $(DESTDIR)$(BINDIR)
@@ -193,6 +229,8 @@ TESTS_PREFIX=tests/
 # No test binaries yet
 TESTS_BIN +=
 
+util.c: $(VERSION_FILE)
+
 ifneq ($(MAKECMDGOALS),libfdt_extra)
 include tests/Makefile.tests
 endif
@@ -203,7 +241,7 @@ endif
 STD_CLEANFILES = *~ *.o *.$(SHAREDLIB_EXT) *.d *.a *.i *.s core a.out vgcore.* \
 	*.tab.[ch] *.lex.c *.output libfdt_extra/*.o libfdt_extra/*.d
 
-clean: tests_clean
+clean: libfdt_extra_clean tests_clean
 	@$(VECHO) CLEAN
 	rm -f $(STD_CLEANFILES)
 	rm -f $(VERSION_FILE)
