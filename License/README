@@ -1,0 +1,51 @@
+Licensing and contribution policy of fdt-tools
+==============================================
+
+This fdt-tools package contains two pieces of software: the tools and
+an addition to libfdt which comprises the files in the libfdt_extra/
+directory. The libfdt additions are BSD-licensed so that they can be
+built into an executable. The tools are GPL-licensed.
+
+As SPDX license tags in each source file attest, the tools are licensed
+under the GNU GPL v2 or later.  See gpl-2.0.txt for the licence.  The
+tools may not be incorporated into works which do not have a
+GPL-compatible license.
+
+The libfdt addition, however, are GPL/BSD dual-licensed.  That is, they
+may be used either under the terms of the GPL, or under the terms of
+the 2-clause BSD license.  The full terms of that license can
+be found in the file entitled 'bsd-2-clause.txt'. This is, in practice,
+equivalent to being BSD-licensed, since the terms of the BSD license are
+strictly more permissive than the GPL.
+
+This approach to licensing has be chosen tofollow how the dtc project
+works. Please see the license README there for more information.
+
+
+Technical notes
+===============
+
+License headers in the source files use SPDX. See Linux Foundation's
+SPDX project [1].
+
+If a "SPDX-License-Identifier:" line references more than one Unique
+License Identifier, then this means that the respective file can be
+used under the terms of either of these licenses, i. e. with
+
+	SPDX-License-Identifier: GPL-2.0+ OR BSD-2-Clause
+
+you can choose between GPL-2.0+ and BSD-2-Clause licensing.
+
+The SPDX Unique License Identifiers are used here, which are available
+at [2].
+
+Please ensure that each new file has an SPDX tag at the top.
+
+
+[1] http://spdx.org/
+[2] http://spdx.org/licenses/
+
+
+Simon Glass
+sjg@chromium.org
+13 July 2023
