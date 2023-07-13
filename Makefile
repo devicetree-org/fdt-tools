@@ -16,12 +16,13 @@ EXTRAVERSION =
 LOCAL_VERSION =
 CONFIG_LOCALVERSION =
 
-CPPFLAGS = -I .
+CPPFLAGS = -I libfdt_extra -I .
 WARNINGS = -Wall -Wpointer-arith -Wcast-qual -Wnested-externs -Wsign-compare \
 	-Wstrict-prototypes -Wmissing-prototypes -Wredundant-decls -Wshadow \
 	-Wsuggest-attribute=format -Wwrite-strings
 CFLAGS = -g -Os $(SHAREDLIB_CFLAGS) -Werror $(WARNINGS) $(EXTRA_CFLAGS) \
 	-Ilibfdt_extra
+LDLIBS_fdtgrep = -lfdt
 
 PKG_CONFIG ?= pkg-config
 PYTHON ?= python3
@@ -122,13 +123,19 @@ define filechk
 	fi;
 endef
 
-# No binaries yet
-BIN +=
+FDTGREP_SRCS = \
+	fdtgrep.c \
+	util.c
+
+FDTGREP_OBJS = $(FDTGREP_SRCS:%.c=%.o)
+
+BIN += fdtgrep
 
 all: $(BIN)
 
 ifneq ($(DEPTARGETS),)
 ifneq ($(MAKECMDGOALS),libfdt_extra)
+-include $(FDTGREP_OBJS:%.o=%.d)
 endif
 endif
 
@@ -191,6 +198,8 @@ install: install-bin install-lib install-includes
 $(VERSION_FILE): Makefile FORCE
 	$(call filechk,version)
 
+fdtgrep: $(FDTGREP_OBJS) $(LIBFDT_EXTRA_dep)
+
 
 dist:
 	git archive --format=tar --prefix=dtc-$(fdt_tools_version)/ HEAD \
@@ -226,10 +235,7 @@ tags: FORCE
 #
 TESTS_PREFIX=tests/
 
-# No test binaries yet
-TESTS_BIN +=
-
-util.c: $(VERSION_FILE)
+TESTS_BIN += fdtgrep
 
 ifneq ($(MAKECMDGOALS),libfdt_extra)
 include tests/Makefile.tests

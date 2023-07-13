@@ -227,6 +227,258 @@ libfdt_extra_tests () {
     done
 }
 
+fdtgrep_tests () {
+    local addr
+    local all_lines        # Total source lines in .dts file
+    local base
+    local dt_start
+    local lines
+    local node_lines       # Number of lines of 'struct' output
+    local orig
+    local string_size
+    local tmp
+    local tree
+
+    tmp=/tmp/tests.$$
+    orig=region_tree.test.dtb
+
+    run_wrap_test ./region_tree 0 1000 ${orig}
+
+    # Hash of partial tree
+    # - modify tree in various ways and check that hash is unaffected
+    tree=region_tree.mod.dtb
+    cp $orig $tree
+    args="-n /images/kernel@1"
+    run_wrap_test check_hash 0 /images "$args" $tree
+    run_wrap_test check_hash 0 /images/kernel@1/hash@1 "$args" $tree
+    run_wrap_test check_hash 0 / "$args" $tree
+    $DTPUT -c $tree /images/kernel@1/newnode
+    run_wrap_test check_hash 0 / "$args" $tree
+    run_wrap_test check_hash 1 /images/kernel@1 "$args" $tree
+
+    # Now hash immediate subnodes so we detect a new subnode added
+    cp $orig $tree
+    args="-n /images/kernel@1 -e"
+    run_wrap_test check_hash 0 /images "$args" $tree
+    run_wrap_test check_hash 0 /images/kernel@1/hash@1 "$args" $tree
+    run_wrap_test check_hash 0 / "$args" $tree
+    base=$($DTGREP $args -O bin $tree | sha1sum)
+    $DTPUT -c $tree /images/kernel@1/newnode
+    run_wrap_test check_hash 1 / "$args" $tree "$base"
+    cp $orig $tree
+    run_wrap_test check_hash 1 /images/kernel@1 "$args" $tree
+
+    # Hash the string table, which should change if we add a new property name
+    # (Adding an existing property name will just reuse that string)
+    cp $orig $tree
+    args="-t -n /images/kernel@1"
+    run_wrap_test check_hash 0 /images "$args" $tree "" data
+    run_wrap_test check_hash 1 /images/kernel@1 "$args" $tree
+
+    dts=${SRCDIR}/grep.dts
+    dtb=grep.dtb
+    run_dtc_test -O dtb -p 0x1000 -o $dtb $dts
+
+    # Tests for each argument are roughly in alphabetical order
+    #
+    # First a sanity check that we can get back the source from the .dtb
+    all_lines=$(cat $dts | wc -l)
+    non_license_lines=$(($all_lines - 2))
+    run_wrap_test check_lines ${non_license_lines} $DTGREP -Im $dtb
+    node_lines=$(($non_license_lines - 2))
+
+    # Get the offset of the dt_struct start (also tests -H somewhat)
+    dt_start=$($DTGREP -H $dtb | awk '/off_dt_struct:/ {print $3}')
+    dt_size=$($DTGREP -H $dtb | awk '/size_dt_struct:/ {print $3}')
+
+    # Check -a: the first line should contain the offset of the dt_start
+    addr=$($DTGREP -a $dtb | head -1 | tr -d : | awk '{print $1}')
+    run_wrap_test equal_test "-a offset first" "$dt_start" "0x$addr"
+
+    # Last line should be 8 bytes less than the size (NODE, END tags)
+    addr=$($DTGREP -a $dtb | tail -1 | tr -d : | awk '{print $1}')
+    last=$(printf "%#x" $(($dt_start + $dt_size - 8)))
+    run_wrap_test equal_test "-a offset last" "$last" "0x$addr"
+
+    # Check the offset option in a similar way. The first offset should be 0
+    # and the last one should be the size of the struct area.
+    addr=$($DTGREP -f $dtb | head -1 | tr -d : | awk '{print $1}')
+    run_wrap_test equal_test "-o offset first" "0x0" "0x$addr"
+    addr=$($DTGREP -f $dtb | tail -1 | tr -d : | awk '{print $1}')
+    last=$(printf "%#x" $(($dt_size - 8)))
+    run_wrap_test equal_test "-f offset last" "$last" "0x$addr"
+
+    # Check that -A controls display of all lines
+    # The 'chosen' node should only have four output lines
+    run_wrap_test check_lines $node_lines $DTGREP -S -A -n /chosen $dtb
+    run_wrap_test check_lines 4 $DTGREP -S -n /chosen $dtb
+
+    # Check that -c picks out nodes
+    run_wrap_test check_lines 7 $DTGREP -S -c ixtapa $dtb
+    run_wrap_test check_lines $(($node_lines - 7)) $DTGREP -S -C ixtapa $dtb
+
+    # -d marks selected lines with +
+    run_wrap_test check_lines $node_lines $DTGREP -S -Ad -n /chosen $dtb
+    run_wrap_test check_lines 4 $DTGREP -S -Ad -n /chosen $dtb |grep +
+
+    # -g should find a node, property or compatible string
+    run_wrap_test check_lines 2 $DTGREP -S -g / $dtb
+    run_wrap_test check_lines 2 $DTGREP -S -g /chosen $dtb
+    run_wrap_test check_lines $(($node_lines - 2)) $DTGREP -S -G /chosen $dtb
+
+    run_wrap_test check_lines 1 $DTGREP -S -g bootargs $dtb
+    run_wrap_test check_lines $(($node_lines - 1)) $DTGREP -S -G bootargs $dtb
+
+    # We should find the /holiday node, so 1 line for 'holiday {', one for '}'
+    run_wrap_test check_lines 2 $DTGREP -S -g ixtapa $dtb
+    run_wrap_test check_lines $(($node_lines - 2)) $DTGREP -S -G ixtapa $dtb
+
+    run_wrap_test check_lines 3 $DTGREP -S -g ixtapa -g bootargs $dtb
+    run_wrap_test check_lines $(($node_lines - 3)) $DTGREP -S -G ixtapa \
+	-G bootargs $dtb
+
+    # -l outputs a,list of regions - here we should get 3: one for the header,
+    # one for the node and one for the 'end' tag.
+    run_wrap_test check_lines 3 $DTGREP -S -l -n /chosen $dtb -o $tmp
+
+    # -L outputs all the strings in the string table
+    cat >$tmp <<END
+	#address-cells
+	airline
+	bootargs
+	compatible
+	linux,platform
+	model
+	reg
+	#size-cells
+	status
+	weather
+END
+    lines=$(cat $tmp | wc -l)
+    run_wrap_test check_lines $lines $DTGREP -S -L -n // $dtb
+
+    # Check that the -m flag works
+    run_wrap_test check_contains 1 memreserve $DTGREP -Im $dtb
+    run_wrap_test check_contains 0 memreserve $DTGREP -I $dtb
+
+    # Test -n
+    run_wrap_test check_lines 0 $DTGREP -S -n // $dtb
+    run_wrap_test check_lines 0 $DTGREP -S -n chosen $dtb
+    run_wrap_test check_lines 0 $DTGREP -S -n holiday $dtb
+    run_wrap_test check_lines 0 $DTGREP -S -n \"\" $dtb
+    run_wrap_test check_lines 4 $DTGREP -S -n /chosen $dtb
+    run_wrap_test check_lines 7 $DTGREP -S -n /holiday $dtb
+    run_wrap_test check_lines 11 $DTGREP -S -n /chosen -n /holiday $dtb
+
+    # Test -N which should list everything except matching nodes
+    run_wrap_test check_lines $node_lines $DTGREP -S -N // $dtb
+    run_wrap_test check_lines $node_lines $DTGREP -S -N chosen $dtb
+    run_wrap_test check_lines $(($node_lines - 4)) $DTGREP -S -N /chosen $dtb
+    run_wrap_test check_lines $(($node_lines - 7)) $DTGREP -S -N /holiday $dtb
+    run_wrap_test check_lines $(($node_lines - 11)) $DTGREP -S -N /chosen \
+	-N /holiday $dtb
+
+    # Using -n and -N together is undefined, so we don't have tests for that
+    # The same applies for -p/-P and -c/-C.
+    run_wrap_error_test $DTGREP -n chosen -N holiday $dtb
+    run_wrap_error_test $DTGREP -c chosen -C holiday $dtb
+    run_wrap_error_test $DTGREP -p chosen -P holiday $dtb
+
+    # Test -o: this should output just the .dts file to a file
+    # Where there is non-dts output it should go to stdout
+    rm -f $tmp
+    run_wrap_test check_lines 0 $DTGREP $dtb -o $tmp
+    run_wrap_test check_lines $node_lines cat $tmp
+
+    # Here we expect a region list with a single entry, plus a header line
+    # on stdout
+    run_wrap_test check_lines 2 $DTGREP $dtb -o $tmp -l
+    run_wrap_test check_lines $node_lines cat $tmp
+
+    # Here we expect a list of strings on stdout
+    run_wrap_test check_lines ${lines} $DTGREP $dtb -o $tmp -L
+    run_wrap_test check_lines $node_lines cat $tmp
+
+    # Test -p: with -S we only get the compatible lines themselves
+    run_wrap_test check_lines 2 $DTGREP -S -p compatible -n // $dtb
+    run_wrap_test check_lines 1 $DTGREP -S -p bootargs -n // $dtb
+
+    # Without -S we also get the node containing these properties
+    run_wrap_test check_lines 6 $DTGREP -p compatible -n // $dtb
+    run_wrap_test check_lines 5 $DTGREP -p bootargs -n // $dtb
+
+    # Now similar tests for -P
+    # First get the number of property lines (containing '=')
+    lines=$(grep "=" $dts |wc -l)
+    run_wrap_test check_lines $(($lines - 2)) $DTGREP -S -P compatible \
+	-n // $dtb
+    run_wrap_test check_lines $(($lines - 1)) $DTGREP -S -P bootargs \
+	-n // $dtb
+    run_wrap_test check_lines $(($lines - 3)) $DTGREP -S -P compatible \
+	-P bootargs -n // $dtb
+
+    # Without -S we also get the node containing these properties
+    run_wrap_test check_lines $(($node_lines - 2)) $DTGREP -P compatible \
+	-n // $dtb
+    run_wrap_test check_lines $(($node_lines - 1)) $DTGREP -P bootargs \
+	-n // $dtb
+    run_wrap_test check_lines $(($node_lines - 3)) $DTGREP -P compatible \
+	-P bootargs -n // $dtb
+
+    # -s should bring in all sub-nodes
+    run_wrap_test check_lines 2 $DTGREP -p none -n / $dtb
+    run_wrap_test check_lines 6 $DTGREP -e -p none -n / $dtb
+    run_wrap_test check_lines 2 $DTGREP -S -p none -n /holiday $dtb
+    run_wrap_test check_lines 4 $DTGREP  -p none -n /holiday $dtb
+    run_wrap_test check_lines 8 $DTGREP -e -p none -n /holiday $dtb
+
+    # -v inverts the polarity of any condition
+    run_wrap_test check_lines $(($node_lines - 2)) $DTGREP -Sv -p none \
+	-n / $dtb
+    run_wrap_test check_lines $(($node_lines - 2)) $DTGREP -Sv -p compatible \
+	-n // $dtb
+    run_wrap_test check_lines $(($node_lines - 2)) $DTGREP -Sv -g /chosen \
+	$dtb
+    run_wrap_test check_lines $node_lines $DTGREP -Sv -n // $dtb
+    run_wrap_test check_lines $node_lines $DTGREP -Sv -n chosen $dtb
+    run_wrap_error_test $DTGREP -v -N holiday $dtb
+
+    # Check that the -I flag works
+    run_wrap_test check_contains 1 dts-v1 $DTGREP -I $dtb
+    run_wrap_test check_contains 0 dts-v1 $DTGREP $dtb
+
+    # Now some dtb tests. The dts tests above have tested the basic grepping
+    # features so we only need to concern ourselves with things that are
+    # different about dtb/bin output.
+
+    # An empty node list should just give us the FDT_END tag
+    run_wrap_test check_bytes 4 $DTGREP -n // -S -O bin $dtb
+
+    # The mem_rsvmap is two entries of 16 bytes each
+    run_wrap_test check_bytes $((4 + 32)) $DTGREP -m -n // -S -O bin $dtb
+
+    # Check we can add the string table
+    string_size=$($DTGREP -H $dtb | awk '/size_dt_strings:/ {print $3}')
+    run_wrap_test check_bytes $((4 + $string_size)) $DTGREP -t -n // -O bin -S \
+	$dtb
+    run_wrap_test check_bytes $((4 + 32 + $string_size)) $DTGREP -tm \
+	-n // -S -O bin $dtb
+
+    # Check that a pass-through works ok. fdtgrep aligns the mem_rsvmap table
+    # to a 16-bytes boundary, but dtc uses 8 bytes so we expect the size to
+    # increase by 8 bytes...
+    run_dtc_test -O dtb -o $dtb $dts
+    base=$(stat -c %s $dtb)
+    run_wrap_test check_bytes $base $DTGREP -O dtb $dtb
+
+    # ...but we should get the same output from fdtgrep in a second pass
+    run_wrap_test check_bytes 0 $DTGREP -O dtb $dtb -o $tmp
+    base=$(stat -c %s $tmp)
+    run_wrap_test check_bytes $base $DTGREP -O dtb $tmp
+
+    rm -f $tmp
+}
+
 while getopts "vt:m" ARG ; do
     case $ARG in
 	"v")
@@ -242,7 +494,7 @@ while getopts "vt:m" ARG ; do
 done
 
 if [ -z "$TESTSETS" ]; then
-    TESTSETS="libfdt_extra"
+    TESTSETS="libfdt_extra fdtgrep"
 fi
 
 # Make sure we don't have stale blobs lying around
@@ -252,6 +504,9 @@ for set in $TESTSETS; do
     case $set in
 	"libfdt_extra")
 	    libfdt_extra_tests
+	    ;;
+	"fdtgrep")
+	    fdtgrep_tests
 	    ;;
     esac
 done
