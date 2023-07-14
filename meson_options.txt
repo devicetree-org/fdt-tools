@@ -1,0 +1,8 @@
+# SPDX-License-Identifier: GPL-2.0+
+
+option('tools', type: 'boolean', value: true,
+       description: 'Build tools')
+option('valgrind', type: 'feature', value: 'auto',
+       description: 'Valgrind support')
+option('static-build', type: 'boolean', value: false,
+       description: 'Build static binaries')

@@ -1,6 +1,22 @@
+# SPDX-License-Identifier: GPL-2.0+
+
 # Flattened Device Tree (FDT) tools
 
 This contains tools for use with FDT.
+
+## Building
+
+FDT tools uses meson:
+
+    mkdir build
+    cd build
+    meson setup
+    meson compile
+    meson test -v
+
+To do a static build, add the option to the 'meson setup' command:
+
+   meson setup -D static-build=true ..
 
 ## FDT Regions
 
