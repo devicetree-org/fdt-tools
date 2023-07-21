@@ -1,0 +1,10 @@
+*.o
+*.a
+*.so
+*.so.1
+*.d
+*.dtb
+version_gen.h
+fdtgrep
+tests/region_tree
+*.patch
