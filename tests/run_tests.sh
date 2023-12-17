@@ -209,11 +209,10 @@ check_contains () {
 
 # Check that $2 and $3 are equal. $1 is the test name to display
 equal_test () {
-    echo -n "$1:	"
     if [ "$2" = "$3" ]; then
-	PASS
+	true
     else
-	FAIL "$2 != $3"
+	false
     fi
 }
 
