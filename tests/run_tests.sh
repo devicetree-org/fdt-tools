@@ -431,6 +431,12 @@ END
     run_wrap_test check_lines 4 $DTGREP  -p none -n /holiday $dtb
     run_wrap_test check_lines 8 $DTGREP -e -p none -n /holiday $dtb
 
+    # check -b with and without -u
+    run_wrap_test check_lines 12 $DTGREP -b airline $dtb
+    run_wrap_test check_lines 21 $DTGREP -u -b airline $dtb
+    run_wrap_test check_lines 6 $DTGREP -b bootargs $dtb
+    run_wrap_test check_lines 10 $DTGREP -u -b bootargs $dtb
+
     # -v inverts the polarity of any condition
     run_wrap_test check_lines $(($node_lines - 2)) $DTGREP -Sv -p none \
 	-n / $dtb
